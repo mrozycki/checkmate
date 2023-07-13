@@ -1,0 +1,21 @@
+openapi: 3.0.0
+info:
+  title: Chechmate API
+  description: Backend API for Checkmate app
+  version: 0.1.0
+servers:
+  - url: http://localhost:8081/
+    description: Local development server
+paths:
+  /hello:
+    get:
+      summary: Dummy endpoint
+      description: Returns "Hello, world!"
+      responses:
+        "200":
+          description: Dummy return string
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Hello, world!"
