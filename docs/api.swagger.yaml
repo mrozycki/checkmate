@@ -1,21 +1,326 @@
 openapi: 3.0.0
 info:
-  title: Chechmate API
+  title: Checkmate API
   description: Backend API for Checkmate app
   version: 0.1.0
 servers:
   - url: http://localhost:8081/
     description: Local development server
+tags:
+  - name: user
+    description: Users
+  - name: checklists
+    description: Checklists - templates to execute
+  - name: executions
+    description: Executions - instances of checklist executions
 paths:
-  /hello:
-    get:
-      summary: Dummy endpoint
-      description: Returns "Hello, world!"
+  /user:
+    post:
+      tags:
+        - user
+      summary: Create user
+      operationId: create_user
+      requestBody:
+        description: Created user object
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
       responses:
-        "200":
-          description: Dummy return string
+        default:
+          description: Success
           content:
-            text/plain:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                    example: krtek
+  /user/login:
+    post:
+      tags:
+        - user
+      summary: Log user into the system
+      operationId: login_user
+      requestBody:
+        content: 
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: Success
+          headers:
+            X-Rate-Limit:
+              description: calls per hour allowed by the user
+              schema:
+                type: integer
+                format: int32
+            X-Expires-After:
+              description: date in UTC when token expires
               schema:
                 type: string
-              example: "Hello, world!"
+                format: date-time
+          content:
+            application/json:
+              schema:
+                type: string
+        '400':
+          description: Invalid username/password supplied
+  /user/logout:
+    post:
+      tags:
+        - user
+      summary: Log user out
+      operationId: logout_user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '400':
+          description: Invalid bearer token
+  /checklists:
+    get:
+      tags:
+        - checklists
+      summary: View all checklists
+      operationId: list_checklists
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: 
+                      type: string
+                    title:
+                      type: string
+    post:
+      tags: 
+        - checklists
+      summary: Create new checklist
+      operationId: create_checklist
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: Created checklist
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckList'
+      responses: 
+        default:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckList'
+  /checklists/{id}:
+    get:
+      tags:
+        - checklists
+      summary: View single checklist
+      operationId: get_checklist
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckList'
+        '400':
+          description: Invalid id
+  /checklists/{id}/execute:
+    post:
+      tags:
+        - checklists
+      summary: Execute checklist
+      operationId: execute_checklist
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution_id:
+                    type: string
+                    format: uuid
+  /executions:
+    get:
+      tags:
+        - executions
+      summary: View all executions
+      operationId: list_executions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: 
+                      type: string
+                    title:
+                      type: string
+  /executions/{id}:
+    get:
+      tags:
+        - executions
+      summary: View single execution
+      operationId: get_execution
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '400':
+          description: Invalid id
+  /executions/{id}/state:
+    put:
+      tags:
+        - executions
+      summary: Update state of an execution
+      operationId: update_execution_state
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: New state of the Execution
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/State'
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '400':
+          description: Invalid id
+  /executions/{id}/tasks/{index}/state:
+    put:
+      tags:
+        - executions
+      summary: Update state of a single step of execution
+      operationId: update_execution_step
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: New state of the TaskStatus
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/State'
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+        '400':
+          description: Invalid id
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+          example: krtek
+        password:
+          type: string
+          example: '12345'
+    Task:
+      type: object
+      required:
+        - title
+        - state
+      properties:
+        title:
+          type: string
+        state:
+          type: string
+          enum: 
+            - not_started 
+            - done
+    CheckList:
+      type: object
+      required:
+        - title
+        - tasks
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: c239be7c-3a52-48ad-b8f1-4ae3c920e711
+        title:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        owner:
+          type: string
+          example: jozin
+    TaskStatus:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          $ref: '#/components/schemas/State'
+    Execution:
+      type: object
+      required:
+        - id
+        - checklist_id
+        - states
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: c239be7c-3a52-48ad-b8f1-4ae3c920e711
+        checklist_id:
+          type: string
+          format: uuid
+          example: c239be7c-3a52-48ad-b8f1-4ae3c920e711
+        task_statuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskStatus'
+        state:
+          $ref: '#/components/schemas/State'
+    State:
+      type: string
+      enum: 
+        - not_started
+        - done
+  securitySchemes:
+    bearerAuth:            
+      type: http
+      scheme: bearer
