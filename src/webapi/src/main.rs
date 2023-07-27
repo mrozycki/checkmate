@@ -1,32 +1,12 @@
-mod routes;
-
-use actix_web::{App, HttpServer};
-use tracing_actix_web::TracingLogger;
-use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-use tracing_log::LogTracer;
-use tracing_subscriber::{prelude::*, EnvFilter, Registry};
-
-fn initialize_tracing() {
-    LogTracer::init().expect("Failed to set logger");
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let formatting_layer = BunyanFormattingLayer::new("checkmate".into(), std::io::stdout);
-    let subscriber = Registry::default()
-        .with(env_filter)
-        .with(JsonStorageLayer)
-        .with(formatting_layer);
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
-}
+use std::net::TcpListener;
+use webapi::{startup, telemetry};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    initialize_tracing();
+    let subscriber =
+        telemetry::get_subscriber("checkmate", tracing::log::Level::Info, std::io::stdout);
+    telemetry::init_subscriber(subscriber);
 
-    HttpServer::new(|| {
-        App::new()
-            .wrap(TracingLogger::default())
-            .service(routes::infra::ping)
-    })
-    .bind(("0.0.0.0", 8081))?
-    .run()
-    .await
+    let listener = TcpListener::bind("127.0.0.1:8081")?;
+    startup::run(listener)?.await
 }
