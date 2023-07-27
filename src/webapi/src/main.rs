@@ -1,6 +1,7 @@
 mod routes;
 
 use actix_web::{App, HttpServer};
+use tracing_actix_web::TracingLogger;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
 use tracing_subscriber::{prelude::*, EnvFilter, Registry};
@@ -20,8 +21,12 @@ fn initialize_tracing() {
 async fn main() -> std::io::Result<()> {
     initialize_tracing();
 
-    HttpServer::new(|| App::new().service(routes::infra::ping))
-        .bind(("0.0.0.0", 8081))?
-        .run()
-        .await
+    HttpServer::new(|| {
+        App::new()
+            .wrap(TracingLogger::default())
+            .service(routes::infra::ping)
+    })
+    .bind(("0.0.0.0", 8081))?
+    .run()
+    .await
 }
