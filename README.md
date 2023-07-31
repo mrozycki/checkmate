@@ -8,6 +8,23 @@ facilitating execution of repeatable processes.
 
 You will need a Rust toolchain installed, preferably through [rustup](https://rustup.rs/).
 
+Then you need to install dependencies:
+
+```
+cargo install sqlx-cli --no-default-features --features rustls,postgres
+```
+
+Next steps rely on having a postgres database instance. You can use docker compose to set one up:
+```
+docker compose -f docker/docker-compose.yml up -d
+```
+After starting the db container for the first time, run:
+
+```
+source .env # to set the DATABASE_URL
+sqlx database reset # to run the migrations and let sqlx create tables it needs
+```
+
 You can then just run the backend with:
 
 ```
