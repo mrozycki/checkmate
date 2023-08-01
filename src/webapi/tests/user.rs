@@ -15,7 +15,6 @@ async fn creating_user_returns_a_200_for_valid_data() {
     // Act
     let response = client
         .post(&format!("{}/user", &app.address))
-        // .header("Content-Type", "application/x-www-form-urlencoded")
         .json(&map)
         .send()
         .await
