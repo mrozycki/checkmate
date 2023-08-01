@@ -1,8 +1,9 @@
 use actix_web::{post, web, HttpResponse};
 use secrecy::SecretString;
+use serde_json::json;
 use sqlx::PgPool;
 
-use crate::controller::user_repository::insert_user;
+use crate::controller::user_repository::{insert_user, UserRepositoryError};
 
 #[derive(serde::Deserialize)]
 pub struct CreateUserRequest {
@@ -30,6 +31,11 @@ pub async fn create_user(
         Ok(_) => HttpResponse::Ok().json(CreateUserResponse {
             username: request.username.clone(),
         }),
+        Err(e @ UserRepositoryError::UserAlreadyExists { .. }) => {
+            HttpResponse::Conflict().json(json!({
+                "error": e.to_string()
+            }))
+        }
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }

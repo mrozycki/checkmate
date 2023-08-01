@@ -31,6 +31,8 @@ secrecy = { version = "0.8.0", features = ["serde"] }
 config = { version = "0.13.3", default-features = false, features = ["yaml"] }
 serde = "1.0"
 chrono = { version = "0.4.26", default-features = false, features = ["clock"] }
+thiserror = "1.0.44"
+serde_json = "1.0.104"
 
 [dev-dependencies]
 reqwest = { version = "0.11", features = ["json"] }
