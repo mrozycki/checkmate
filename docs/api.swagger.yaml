@@ -37,6 +37,16 @@ paths:
                   username:
                     type: string
                     example: krtek
+        409:
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: user 'krtek' already exists
   /user/login:
     post:
       tags:
