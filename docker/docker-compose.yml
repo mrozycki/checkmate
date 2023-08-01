@@ -1,0 +1,32 @@
+version: "3"
+name: checkmate_stack
+services:
+  checkmate_pg:
+    env_file: ../.env
+    container_name: checkmate_pg
+    image: postgres
+    environment:
+      PGDATA: /data/postgres
+    volumes:
+      - ./postgres:/data/postgres
+    ports:
+      - 5432:5432
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+  # TODO: Make it work as one stack (fix database access)
+  # checkmate:
+  #   env_file: ../.env
+  #   build:
+  #     context: ..
+  #     dockerfile: "docker/main.dockerfile"
+  #   ports:
+  #     - 8081:8081
+  #   depends_on:
+  #     checkmate_pg:
+  #       condition: service_healthy
+  #   command: ["cargo", "run"]
