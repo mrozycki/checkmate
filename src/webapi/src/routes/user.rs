@@ -1,9 +1,9 @@
 use actix_web::{post, web, HttpResponse};
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use sqlx::PgPool;
 
-use crate::controller::user_repository::{insert_user, UserRepositoryError};
+use crate::controller::user_repository::{self, UserRepositoryError};
 
 #[derive(serde::Deserialize)]
 pub struct CreateUserRequest {
@@ -27,7 +27,7 @@ pub async fn create_user(
     request: web::Json<CreateUserRequest>,
     pool: web::Data<PgPool>,
 ) -> HttpResponse {
-    match insert_user(&pool, &request).await {
+    match user_repository::insert_user(&pool, &request).await {
         Ok(_) => HttpResponse::Ok().json(CreateUserResponse {
             username: request.username.clone(),
         }),
@@ -36,6 +36,33 @@ pub async fn create_user(
                 "error": e.to_string()
             }))
         }
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct LoginUserRequest {
+    pub username: String,
+    pub password: SecretString,
+}
+
+#[post("/user/login")]
+#[tracing::instrument(
+    name = "Logging in a user",
+    skip(request, pool),
+    fields(
+        username = %request.username
+    )
+)]
+pub async fn login_user(
+    request: web::Json<LoginUserRequest>,
+    pool: web::Data<PgPool>,
+) -> HttpResponse {
+    match user_repository::login_user(&pool, &request).await {
+        Ok(token) => HttpResponse::Ok().json(json!( {
+            "token": token.to_secret_string().expose_secret(),
+        })),
+        Err(UserRepositoryError::InvalidUserOrPassword) => HttpResponse::Unauthorized().finish(),
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }

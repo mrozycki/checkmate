@@ -12,6 +12,7 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Er
             .wrap(TracingLogger::default())
             .service(routes::infra::ping)
             .service(routes::user::create_user)
+            .service(routes::user::login_user)
             .app_data(db_pool.clone())
     })
     .listen(listener)?

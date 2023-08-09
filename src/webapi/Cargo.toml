@@ -33,6 +33,9 @@ serde = "1.0"
 chrono = { version = "0.4.26", default-features = false, features = ["clock"] }
 thiserror = "1.0.44"
 serde_json = "1.0.104"
+rand = "0.8.5"
+hex = "0.4.3"
+rand_core = "0.6.4"
 
 [dev-dependencies]
 reqwest = { version = "0.11", features = ["json"] }
