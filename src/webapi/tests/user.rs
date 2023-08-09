@@ -1,44 +1,83 @@
 mod common;
 
+use secrecy::ExposeSecret;
+use serde::Deserialize;
 use serde_json::json;
-use std::collections::HashMap;
-use webapi::routes;
+use std::{collections::HashMap, str::FromStr};
+use webapi::{
+    models::session_token::{SessionToken, SESSION_TOKEN_LENGTH},
+    routes,
+};
+
+#[derive(Deserialize)]
+struct LoginUserResponse {
+    token: String,
+}
 
 #[tokio::test]
 async fn creating_user_returns_a_200_for_valid_data() {
     // Arrange
     let app = common::spawn_app().await;
     let client = reqwest::Client::new();
+    let request = json!({"username": "jozin","password": "123"});
 
     // Act
-    let response = client
+    let create_user_response = client
         .post(&format!("{}/user", &app.address))
-        .json(&json!({"username": "jozin","password": "123"}))
+        .json(&request)
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    let login_user_response = client
+        .post(&format!("{}/user/login", &app.address))
+        .json(&request)
         .send()
         .await
         .expect("Failed to execute request.");
 
     // Assert
-    assert_eq!(200, response.status().as_u16());
-    let json = response
+    assert_eq!(200, create_user_response.status().as_u16());
+    let parsed_create_user_response = create_user_response
         .json::<routes::user::CreateUserResponse>()
+        .await
+        .unwrap();
+    assert_eq!(200, login_user_response.status().as_u16());
+    let parsed_login_user_response = login_user_response
+        .json::<LoginUserResponse>()
         .await
         .unwrap();
 
     assert_eq!(
-        json,
+        parsed_create_user_response,
         routes::user::CreateUserResponse {
             username: "jozin".to_owned()
         }
     );
+    assert_eq!(
+        parsed_login_user_response.token.len(),
+        SESSION_TOKEN_LENGTH * 2
+    );
+    let token_value = SessionToken::from_str(parsed_login_user_response.token.as_str())
+        .unwrap()
+        .to_database_value();
+    let session_data = sqlx::query!(
+        r#"SELECT user_id FROM sessions
+        WHERE token = $1"#,
+        token_value.expose_secret()
+    )
+    .fetch_one(&app.db_pool)
+    .await
+    .expect("Failed to fetch saved token.");
 
-    let saved = sqlx::query!("SELECT username, password FROM users",)
+    let saved = sqlx::query!("SELECT id, username, password FROM users",)
         .fetch_one(&app.db_pool)
         .await
-        .expect("Failed to fetch saved subscription.");
+        .expect("Failed to fetch saved user.");
 
     assert_eq!(saved.username, "jozin");
     assert_eq!(saved.password, "123");
+    assert_eq!(saved.id, session_data.user_id.unwrap());
 }
 
 #[tokio::test]
@@ -101,6 +140,16 @@ async fn creating_user_returns_a_409_when_user_exists() {
         .await
         .expect("Failed to execute request.");
 
+    let login_user_response = client
+        .post(&format!("{}/user/login", &app.address))
+        .json(&json!({
+            "username": "jozin",
+            "password": "123"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
     // Assert
 
     assert_eq!(200, response1.status().as_u16());
@@ -121,11 +170,30 @@ async fn creating_user_returns_a_409_when_user_exists() {
 
     assert_eq!(json2, json!({"error": "user 'jozin' already exists"}));
 
-    let saved = sqlx::query!("SELECT username, password FROM users",)
+    assert_eq!(200, login_user_response.status().as_u16());
+    let parsed_login_user_response = login_user_response
+        .json::<LoginUserResponse>()
+        .await
+        .unwrap();
+
+    let token = SessionToken::from_str(parsed_login_user_response.token.as_str())
+        .unwrap()
+        .to_database_value();
+    let sesion_data = sqlx::query!(
+        r#"SELECT user_id FROM sessions
+        WHERE token = $1"#,
+        token.expose_secret()
+    )
+    .fetch_one(&app.db_pool)
+    .await
+    .expect("Failed to fetch saved token.");
+
+    let saved = sqlx::query!("SELECT id, username, password FROM users",)
         .fetch_one(&app.db_pool)
         .await
-        .expect("Failed to fetch saved subscription.");
+        .expect("Failed to fetch saved user.");
 
     assert_eq!(saved.username, "jozin");
     assert_eq!(saved.password, "123");
+    assert_eq!(saved.id, sesion_data.user_id.unwrap());
 }
