@@ -1,8 +1,8 @@
 -- Create Users Table
-CREATE TABLE users(
+CREATE TABLE IF NOT EXISTS users (
     id uuid NOT NULL,
     PRIMARY KEY (id),
     username TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL, -- plain text for now :/
+    password TEXT NOT NULL,
     created_at timestamptz NOT NULL
 );
