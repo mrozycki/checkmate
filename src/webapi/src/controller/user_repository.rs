@@ -2,6 +2,7 @@ use crate::{
     models::session_token::SessionToken,
     routes::user::{CreateUserRequest, LoginUserRequest},
 };
+use argon2::{password_hash::SaltString, Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::Utc;
 use secrecy::ExposeSecret;
 use sqlx::PgPool;
@@ -13,8 +14,8 @@ pub enum UserRepositoryError {
     UserAlreadyExists { username: String },
     #[error("invalid user or password")]
     InvalidUserOrPassword,
-    #[error("internal server error")]
-    InternalError(#[from] sqlx::Error),
+    #[error("internal error")]
+    InternalError,
 }
 
 #[tracing::instrument(name = "Saving new user in the database", skip(pool, user))]
@@ -22,6 +23,16 @@ pub async fn insert_user(
     pool: &PgPool,
     user: &CreateUserRequest,
 ) -> Result<(), UserRepositoryError> {
+    let salt = SaltString::generate(&mut rand::thread_rng());
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(user.password.expose_secret().as_bytes(), &salt)
+        .map_err(|e| {
+            tracing::error!("Hashing error: {}", e);
+            UserRepositoryError::InternalError
+        })?
+        .to_string();
+
     sqlx::query!(
         r#"
     INSERT INTO users (id, username, password, created_at)
@@ -29,7 +40,7 @@ pub async fn insert_user(
             "#,
         Uuid::new_v4(),
         user.username,
-        user.password.expose_secret(),
+        password_hash,
         Utc::now()
     )
     .execute(pool)
@@ -41,16 +52,14 @@ pub async fn insert_user(
                     username: user.username.clone(),
                 }
             } else {
-                UserRepositoryError::InternalError(e)
+                tracing::error!("Failed to execute query: {:?}", e);
+                UserRepositoryError::InternalError
             }
         }
-        _ => UserRepositoryError::InternalError(e),
-    })
-    .map_err(|e| {
-        if let UserRepositoryError::InternalError(_) = e {
+        _ => {
             tracing::error!("Failed to execute query: {:?}", e);
+            UserRepositoryError::InternalError
         }
-        e
     })?;
     Ok(())
 }
@@ -73,13 +82,25 @@ async fn validate_password(
         sqlx::Error::RowNotFound => UserRepositoryError::InvalidUserOrPassword,
         _ => {
             tracing::error!("Failed to execute query: {:?}", e);
-            UserRepositoryError::InternalError(e)
+            UserRepositoryError::InternalError
         }
     })?;
-    if *user.password.expose_secret() == data.password {
-        Ok(data.id)
-    } else {
-        Err(UserRepositoryError::InvalidUserOrPassword)
+
+    let parsed_hash = PasswordHash::new(&data.password).map_err(|e| {
+        tracing::error!("Hashing error: {}", e);
+        UserRepositoryError::InternalError
+    })?;
+
+    match Argon2::default().verify_password(user.password.expose_secret().as_bytes(), &parsed_hash)
+    {
+        Ok(_) => Ok(data.id),
+        Err(argon2::password_hash::Error::Password) => {
+            Err(UserRepositoryError::InvalidUserOrPassword)
+        }
+        Err(e) => {
+            tracing::error!("Failed to hash password: {}", e);
+            Err(UserRepositoryError::InternalError)
+        }
     }
 }
 
@@ -100,7 +121,7 @@ async fn create_token(pool: &PgPool, user_id: &Uuid) -> Result<SessionToken, Use
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
-        e
+        UserRepositoryError::InternalError
     })?;
     Ok(new_token)
 }

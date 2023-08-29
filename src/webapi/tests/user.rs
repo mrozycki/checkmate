@@ -70,13 +70,12 @@ async fn creating_user_returns_a_200_for_valid_data() {
     .await
     .expect("Failed to fetch saved token.");
 
-    let saved = sqlx::query!("SELECT id, username, password FROM users",)
+    let saved = sqlx::query!("SELECT id, username FROM users",)
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved user.");
 
     assert_eq!(saved.username, "jozin");
-    assert_eq!(saved.password, "123");
     assert_eq!(saved.id, session_data.user_id.unwrap());
 }
 
@@ -188,12 +187,11 @@ async fn creating_user_returns_a_409_when_user_exists() {
     .await
     .expect("Failed to fetch saved token.");
 
-    let saved = sqlx::query!("SELECT id, username, password FROM users",)
+    let saved = sqlx::query!("SELECT id, username FROM users",)
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved user.");
 
     assert_eq!(saved.username, "jozin");
-    assert_eq!(saved.password, "123");
     assert_eq!(saved.id, sesion_data.user_id.unwrap());
 }
