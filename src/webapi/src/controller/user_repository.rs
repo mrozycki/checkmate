@@ -1,5 +1,5 @@
 use crate::{
-    models::session_token::SessionToken,
+    models::{session_token::SessionToken, user::UserProfile},
     routes::user::{CreateUserRequest, LoginUserRequest},
 };
 use argon2::{password_hash::SaltString, Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
@@ -14,6 +14,10 @@ pub enum UserRepositoryError {
     UserAlreadyExists { username: String },
     #[error("invalid user or password")]
     InvalidUserOrPassword,
+    #[error("session not found")]
+    SessionNotFound,
+    #[error("user with given id not found")]
+    UserNotFound,
     #[error("internal error")]
     InternalError,
 }
@@ -46,18 +50,13 @@ pub async fn insert_user(
     .execute(pool)
     .await
     .map_err(|e| match e {
-        sqlx::Error::Database(ref db_e) => {
-            if db_e.is_unique_violation() {
-                UserRepositoryError::UserAlreadyExists {
-                    username: user.username.clone(),
-                }
-            } else {
-                tracing::error!("Failed to execute query: {:?}", e);
-                UserRepositoryError::InternalError
+        sqlx::Error::Database(ref db_e) if db_e.is_unique_violation() => {
+            UserRepositoryError::UserAlreadyExists {
+                username: user.username.clone(),
             }
         }
         _ => {
-            tracing::error!("Failed to execute query: {:?}", e);
+            tracing::error!("Failed to create user in database: {:?}", e);
             UserRepositoryError::InternalError
         }
     })?;
@@ -81,7 +80,7 @@ async fn validate_password(
     .map_err(|e| match e {
         sqlx::Error::RowNotFound => UserRepositoryError::InvalidUserOrPassword,
         _ => {
-            tracing::error!("Failed to execute query: {:?}", e);
+            tracing::error!("Failed to fetch user from database: {:?}", e);
             UserRepositoryError::InternalError
         }
     })?;
@@ -120,7 +119,7 @@ async fn create_token(pool: &PgPool, user_id: &Uuid) -> Result<SessionToken, Use
     .execute(pool)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to execute query: {:?}", e);
+        tracing::error!("Failed to create token in database: {:?}", e);
         UserRepositoryError::InternalError
     })?;
     Ok(new_token)
@@ -133,4 +132,78 @@ pub async fn login_user(
     let user_id = validate_password(pool, user).await?;
     let token = create_token(pool, &user_id).await?;
     Ok(token)
+}
+
+pub async fn get_user_id_by_token(
+    pg_pool: &PgPool,
+    token: SessionToken,
+) -> Result<Uuid, UserRepositoryError> {
+    let result = sqlx::query!(
+        r#"
+    SELECT user_id, valid_until from sessions 
+    WHERE token = $1
+            "#,
+        token.to_database_value().expose_secret().to_owned()
+    )
+    .fetch_one(pg_pool)
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => UserRepositoryError::SessionNotFound,
+        _ => {
+            tracing::error!("Failed to fetch session from database: {:?}", e);
+            UserRepositoryError::InternalError
+        }
+    })?;
+
+    if result.valid_until > chrono::Utc::now() {
+        Ok(result.user_id)
+    } else {
+        let _ = delete_session_by_token(pg_pool, token).await;
+        Err(UserRepositoryError::SessionNotFound)
+    }
+}
+
+pub async fn delete_session_by_token(
+    pg_pool: &PgPool,
+    token: SessionToken,
+) -> Result<(), UserRepositoryError> {
+    sqlx::query!(
+        r#"
+    DELETE FROM sessions 
+    WHERE token = $1
+            "#,
+        token.to_database_value().expose_secret().to_owned()
+    )
+    .execute(pg_pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to delete token from database: {:?}", e);
+        UserRepositoryError::InternalError
+    })?;
+    Ok(())
+}
+
+pub async fn get_user_by_id(
+    pg_pool: &PgPool,
+    user_id: Uuid,
+) -> Result<UserProfile, UserRepositoryError> {
+    let username = sqlx::query!(
+        r#"
+    SELECT username FROM users
+    WHERE id = $1
+        "#,
+        user_id
+    )
+    .fetch_one(pg_pool)
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => UserRepositoryError::UserNotFound,
+        e => {
+            tracing::error!("Failed to fetch user from database: {:?}", e);
+            UserRepositoryError::InternalError
+        }
+    })?
+    .username;
+
+    Ok(UserProfile { username })
 }

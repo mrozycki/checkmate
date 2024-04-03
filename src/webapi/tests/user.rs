@@ -5,7 +5,10 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{collections::HashMap, str::FromStr};
 use webapi::{
-    models::session_token::{SessionToken, SESSION_TOKEN_LENGTH},
+    models::{
+        session_token::{SessionToken, SESSION_TOKEN_LENGTH},
+        user::UserProfile,
+    },
     routes,
 };
 
@@ -58,25 +61,29 @@ async fn creating_user_returns_a_200_for_valid_data() {
         parsed_login_user_response.token.len(),
         SESSION_TOKEN_LENGTH * 2
     );
-    let token_value = SessionToken::from_str(parsed_login_user_response.token.as_str())
-        .unwrap()
-        .to_database_value();
-    let session_data = sqlx::query!(
-        r#"SELECT user_id FROM sessions
-        WHERE token = $1"#,
-        token_value.expose_secret()
-    )
-    .fetch_one(&app.db_pool)
-    .await
-    .expect("Failed to fetch saved token.");
-
-    let saved = sqlx::query!("SELECT id, username FROM users",)
-        .fetch_one(&app.db_pool)
+    let token_value = parsed_login_user_response.token.as_str();
+    let logged_in_user = client
+        .get(&format!("{}/user", &app.address))
+        .bearer_auth(token_value)
+        .send()
         .await
-        .expect("Failed to fetch saved user.");
+        .expect("Failed to execute request.");
+    assert_eq!(200, logged_in_user.status().as_u16());
 
-    assert_eq!(saved.username, "jozin");
-    assert_eq!(saved.id, session_data.user_id.unwrap());
+    #[derive(serde::Deserialize)]
+    struct GetUserResponse {
+        user: UserProfile,
+    }
+
+    assert_eq!(
+        "jozin",
+        logged_in_user
+            .json::<GetUserResponse>()
+            .await
+            .expect("a valid get_current_user response")
+            .user
+            .username
+    );
 }
 
 #[tokio::test]
@@ -193,5 +200,49 @@ async fn creating_user_returns_a_409_when_user_exists() {
         .expect("Failed to fetch saved user.");
 
     assert_eq!(saved.username, "jozin");
-    assert_eq!(saved.id, sesion_data.user_id.unwrap());
+    assert_eq!(saved.id, sesion_data.user_id);
+}
+
+#[tokio::test]
+async fn getting_current_response_without_authorization_header_returns_401() {
+    let app = common::spawn_app().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(&format!("{}/user", &app.address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    assert_eq!(401, response.status().as_u16());
+}
+
+#[tokio::test]
+async fn getting_current_response_with_invalid_token_returns_401() {
+    let app = common::spawn_app().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(&format!("{}/user", &app.address))
+        .bearer_auth("8ecdb741f542e8a9c52aeff31ba3a48cbd065cab9c07b1db895867f0f2d5cc56".to_owned())
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    assert_eq!(401, response.status().as_u16());
+}
+
+#[tokio::test]
+async fn getting_current_response_with_invalid_authorization_header_returns_401() {
+    let app = common::spawn_app().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(&format!("{}/user", &app.address))
+        .basic_auth("jozin", Some("123456"))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    assert_eq!(401, response.status().as_u16());
 }

@@ -31,6 +31,12 @@ You can then just run the backend with:
 cargo run
 ```
 
+In order to produce more human-readable logs in the terminal, you can use `jq`:
+
+```
+cargo run | jq -r '[.time, .msg] | @tsv'
+```
+
 ### Git hooks
 
 This repository has git hooks prepared that check simple conditions that might otherwise trip up the CI setup. We recommend that you use them. In order to set them up, run the following command inside the repository:
