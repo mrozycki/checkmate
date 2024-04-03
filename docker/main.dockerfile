@@ -1,5 +1,5 @@
 # Builder stage
-FROM rust:1.71.0 AS builder
+FROM rust:1.77.1 AS builder
 WORKDIR /app
 RUN apt update && apt install lld clang -y 
 ENV SQLX_OFFLINE true

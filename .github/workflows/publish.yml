@@ -23,6 +23,5 @@ jobs:
         with:
           context: .
           file: ./docker/main.dockerfile
-          platform: linux/amd64
           push: true
           tags: rozyckim/checkmate:latest

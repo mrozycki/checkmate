@@ -1,6 +1,6 @@
 use rand_core::{OsRng, RngCore};
 use secrecy::{ExposeSecret, Secret, SecretString};
-use std::{iter, str::FromStr};
+use std::{fmt::Write, iter, str::FromStr};
 
 pub const SESSION_TOKEN_LENGTH: usize = 32;
 
@@ -57,8 +57,10 @@ impl SessionToken {
         self.0
             .expose_secret()
             .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<String>()
+            .fold(String::new(), |mut output, b| {
+                let _ = write!(output, "{b:02x}");
+                output
+            })
             .into()
     }
 }
