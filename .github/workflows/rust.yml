@@ -21,11 +21,9 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install Rust toolchain
         id: toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@1.77.1
         with:
-          toolchain: stable
-          profile: minimal
-          components: rustfmt
+          components: clippy, rustfmt
       - name: Install sqlx cli
         uses: actions-rs/cargo@v1
         with:
@@ -47,7 +45,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-rust-${{ steps.toolchain.outputs.rustc_hash }}
+          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-rust-${{ steps.toolchain.outputs.cachekey }}
       - name: Clippy
         uses: actions-rs/cargo@v1
         with:
